@@ -243,6 +243,21 @@ window2.columnconfigure(1, minsize=200)
 
 window2.mainloop()
 
+# ----------------------- Create optimization volumes --------------------
+
+roi_names = [r.Name for r in patient_model.RegionsOfInterest]
+
+if 'zCTV_ring_2cm' not in roi_names:
+    zctv_ring = patient_model.CreateRoi(Name="zCTV_ring_2cm", Color="Cyan", Type="DoseRegion")
+    zctv_ring.CreateWallGeometry(Examination=examination, SourceRoiName=ctv, OutwardDistance=2, InwardDistance=0)
+
+if 'zCTV-GTV' not in roi_names:
+    zctv_gtv = patient_model.CreateRoi(Name="zCTV-GTV", Color="128, 0, 64", Type="DoseRegion")
+    if gtvp and gtvn:
+        zctv_gtv.CreateAlgebraGeometry(Examination=examination, Algorithm="Auto", ExpressionA={ 'Operation': "Union", 'SourceRoiNames': [ctv], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ExpressionB={ 'Operation': "Union", 'SourceRoiNames': [gtvp, gtvn], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ResultOperation="Subtraction", ResultMarginSettings={ 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 })
+    elif gtvp:
+        zctv_gtv.CreateAlgebraGeometry(Examination=examination, Algorithm="Auto", ExpressionA={ 'Operation': "Union", 'SourceRoiNames': [ctv], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ExpressionB={ 'Operation': "Union", 'SourceRoiNames': [gtvp], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ResultOperation="Subtraction", ResultMarginSettings={ 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 })
+
 
 # ----------------------- Add treatment plan -------------------------
 
@@ -272,7 +287,7 @@ plan = get_current("Plan")
 beam_set = get_current("BeamSet")
 po = plan.PlanOptimizations[0]
 
-# Add objectives for CTV and BODY
+# Add objectives for target volumes and BODY
 
 obj_num = 0
 const_num = 0
@@ -294,7 +309,12 @@ if gtvp:
         po.Objective.ConstituentFunctions[obj_num].DoseFunctionParameters.DoseLevel = 9500
         po.Objective.ConstituentFunctions[obj_num].DoseFunctionParameters.Weight = 100
         obj_num = obj_num + 1     
-
+    with CompositeAction('Add optimization function'):
+        gtvp_max = po.AddOptimizationFunction(FunctionType="MaxDose", RoiName=gtvp, UseRbeDose=True)
+        po.Objective.ConstituentFunctions[obj_num].DoseFunctionParameters.DoseLevel = 11000
+        po.Objective.ConstituentFunctions[obj_num].DoseFunctionParameters.Weight = 500
+        obj_num = obj_num + 1
+        
 if gtvn:    
     with CompositeAction('Add optimization function'):
         gtvn_min = po.AddOptimizationFunction(FunctionType="MinEUD", RoiName=gtvn, IsRobust=True, UseRbeDose=True)
@@ -303,6 +323,18 @@ if gtvn:
         obj_num = obj_num + 1  
     with CompositeAction('Add optimization function'):
         gtvn_max = po.AddOptimizationFunction(FunctionType="MaxEUD", RoiName=gtvn, IsRobust=True, UseRbeDose=True)
+        po.Objective.ConstituentFunctions[obj_num].DoseFunctionParameters.DoseLevel = 7400
+        po.Objective.ConstituentFunctions[obj_num].DoseFunctionParameters.Weight = 100
+        obj_num = obj_num + 1
+
+with CompositeAction('Add optimization function'):
+        ctv_gtv_max = po.AddOptimizationFunction(FunctionType="MaxDose", RoiName='zCTV-GTV', UseRbeDose=True)
+        po.Objective.ConstituentFunctions[obj_num].DoseFunctionParameters.DoseLevel = 9500
+        po.Objective.ConstituentFunctions[obj_num].DoseFunctionParameters.Weight = 100
+        obj_num = obj_num + 1
+
+with CompositeAction('Add optimization function'):
+        ctv_ring_max = po.AddOptimizationFunction(FunctionType="MaxDose", RoiName='zCTV_ring_2cm', UseRbeDose=True)
         po.Objective.ConstituentFunctions[obj_num].DoseFunctionParameters.DoseLevel = 7400
         po.Objective.ConstituentFunctions[obj_num].DoseFunctionParameters.Weight = 100
         obj_num = obj_num + 1
